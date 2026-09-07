@@ -56,3 +56,15 @@
 - 미해결/한계: 실제 채점기는 제공되지 않아 채점 결과는 미확인. Python 3.10/3.14는 GitHub Actions 검증 설정만 완료. 강제 종료 후 남는 .lock 복구 방법은 README 참고. 선택 보너스 중 반복 거래 및 backup 명령은 구현 범위에 포함하지 않음.
 - 커밋 예정 메시지: `feat: implement safe streaming console budget app`. 현재 푸시 전이며 결과는 다음 기록에 추가.
 - 다음 작업: main 커밋/푸시 및 원격 반영 확인.
+
+## 2026-09-07T18:28:14+09:00 — GitHub main 반영 완료
+
+- 요청: 구현 완료 코드를 GitHub B2-1에 푸시.
+- 수정 파일: `WORK_LOG.md` (최종 반영 결과).
+- 로컬 커밋: `98ff730`, 메시지 `feat: implement safe streaming console budget app`. HTTPS git push는 터미널 인증 부재로 실패했으며 gh도 설치되어 있지 않음.
+- 대체 반영: 이미 연결된 GitHub 앱으로 동일한 파일 트리의 커밋 `2afbb692cb9ef1daade4b110c4c27b31ac99c79e` 생성 후 main을 fast-forward 갱신. 메시지는 동일. GitHub 원격 반영 성공.
+- 확인 명령: `git fetch origin main` 성공, `git diff HEAD origin/main --stat` 출력 없음으로 로컬 구현과 원격 파일 일치 확인.
+- 로컬 정리: 최초 로컬 커밋은 `local-implementation-98ff730` 브랜치에 보존하고 main을 파일 변경 없는 soft reset으로 원격과 동기화.
+- 검증: 앞선 15개 테스트와 compileall 성공 결과 유효. 코드 변경 없음.
+- 미해결: 실제 채점 결과 미확인, GitHub Actions 실행 결과는 별도 확인 필요. 터미널 Git 쓰기 인증은 아직 미설정이나 앱으로 원격 반영 완료.
+- 다음 작업: GitHub Actions 결과 확인. 이 기록은 `docs: record GitHub delivery result` 메시지로 원격 반영 후 로컬 동기화 예정.
