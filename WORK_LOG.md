@@ -80,3 +80,13 @@
 - 미해결: 실제 채점기는 제공되지 않아 PASS 결과 자체는 보장할 수 없음. 확인한 원래 미션의 필수 기능 누락은 없음.
 - 반영 예정: 기존 푸시 승인에 따라 GitHub 앱으로 main에 반영. 커밋 메시지 `fix: reject invalid date options and corrupted transaction IDs`.
 - 다음 작업: 원격 반영 결과와 GitHub Actions 확인 및 기록.
+
+## 2026-09-07T18:41:02+09:00 — 가이드 보완 원격 반영 및 CI 성공
+
+- 요청: 미션 가이드 대조 후 필요한 수정 완료.
+- 수정 파일: `WORK_LOG.md` (반영 결과 추가).
+- 원격 반영 성공: GitHub 앱으로 main에 `8af3c1c2ee1f4ef6b5894e7a12eb0a4b19ed7f33`, 메시지 `fix: reject invalid date options and corrupted transaction IDs` 반영. 일반 git push 대신 인증된 앱 사용.
+- 확인: `git fetch origin main`, `git diff origin/main --exit-code` 성공. 파일 변경 없는 soft reset으로 로컬 main 동기화 후 깨끗한 작업 트리 확인.
+- CI: GitHub Actions run 34107301644에서 Python 3.10/3.12/3.14 모두 completed/success. 각 환경에서 전체 18개 테스트 성공.
+- 미해결: 실제 미션 채점 결과만 미확인. 발견한 결함은 모두 수정 완료.
+- 다음 작업: 추가 수정 불필요. 이 최종 기록은 `docs: record mission guide review verification` 커밋으로 main에 반영.
