@@ -5,7 +5,7 @@ from functools import wraps
 from pathlib import Path
 import sys
 import sqlite3
-from typing import Callable, Iterable
+from typing import Callable, Iterable, NoReturn
 from .models import AppError, Transaction, positive
 from .service import BudgetService
 from .storage import Repository
@@ -26,8 +26,16 @@ def handle_errors(function: Callable[[], int]) -> Callable[[], int]:
     return wrapped
 
 
+class ArgumentParser(argparse.ArgumentParser):
+    """하위 명령까지 문법 오류에 원인과 해결 힌트를 제공한다."""
+
+    def error(self, message: str) -> NoReturn:
+        self.print_usage(sys.stderr)
+        self.exit(2, f"[오류] {message}\n[힌트] {self.prog} --help로 필수 옵션과 허용 값을 확인하세요.\n")
+
+
 def parser() -> argparse.ArgumentParser:
-    root = argparse.ArgumentParser(description="파일 기반 콘솔 가계부 (Python 표준 라이브러리)")
+    root = ArgumentParser(description="파일 기반 콘솔 가계부 (Python 표준 라이브러리)")
     root.add_argument("--data-dir", default="./data", help="JSONL 저장 폴더 (기본: ./data)")
     commands = root.add_subparsers(dest="command", required=True)
     def command(name: str, help: str) -> argparse.ArgumentParser:
@@ -127,7 +135,7 @@ def main() -> int:
                 print(f"[저장 완료] {args.month} 예산 {args.amount}원")
             else:
                 from .models import valid_month
-                if args.month:
+                if args.month is not None:
                     valid_month(args.month)
                 rows = [(m, a) for m, a in sorted(service.budgets().items()) if not args.month or m == args.month]
                 print("\n".join(f"{m}: {a}원" for m, a in rows) or "설정된 예산 없음")

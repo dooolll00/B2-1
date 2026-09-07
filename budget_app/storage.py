@@ -73,8 +73,8 @@ class Repository:
     def transactions(self) -> Iterator[Transaction]:
         for number, record in enumerate(self.records("transactions"), 1):
             try:
-                if "id" not in record:
-                    raise ValueError("missing id")
+                if not isinstance(record.get("id"), str) or not record["id"].strip():
+                    raise ValueError("id는 비어 있지 않은 문자열이어야 합니다")
                 yield Transaction.create(**record)
             except (TypeError, ValueError, AppError) as exc:
                 raise AppError(f"transactions.jsonl {number}행 거래 오류. 백업이나 원본을 확인하세요: {exc}") from exc

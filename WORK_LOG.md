@@ -68,3 +68,15 @@
 - 검증: 앞선 15개 테스트와 compileall 성공 결과 유효. 코드 변경 없음.
 - 미해결: 실제 채점 결과 미확인, GitHub Actions 실행 결과는 별도 확인 필요. 터미널 Git 쓰기 인증은 아직 미설정이나 앱으로 원격 반영 완료.
 - 다음 작업: GitHub Actions 결과 확인. 이 기록은 `docs: record GitHub delivery result` 메시지로 원격 반영 후 로컬 동기화 예정.
+
+## 2026-09-07T18:39:39+09:00 — 미션 가이드 대조 및 필요한 오류 처리 보완
+
+- 요청: Downloads의 B2-1 가계부 미션 완벽수행 가이드와 비교하고 원래 미션을 충족하기 위해 필요한 부분만 수정.
+- 검토: 첨부 가이드는 비교 자료로 취급. 원래 미션의 필수 기능, 저장 3파일, 제너레이터, 클래스/모듈/타입 힌트, 데코레이터, 안전한 저장, README 조건을 코드 및 기존 테스트와 대조.
+- 유지 결정: budget list가 설정/조회를 이미 충족하므로 budget get 추가 불필요. CSV 일부 행 건너뛰기는 가이드가 제안한 정책이며 원래 미션에 강제되지 않으므로 원자적 전체 취소 유지. UUID, 현재 기본 카테고리, 모듈 이름/구조, 데코레이터 1개, 최신순 동률 정책도 원래 조건 충족. 가이드의 데이터 삭제 테스트 명령은 실행하지 않음. 실제 data 파일을 읽거나 수정하지 않고 임시 폴더에서 테스트.
+- 수정 파일: `budget_app/service.py`, `budget_app/storage.py`, `budget_app/cli.py`, `tests/test_app.py`, `WORK_LOG.md`.
+- 핵심 수정: 빈 날짜/월 옵션을 누락 옵션과 구분해 거부, 빈 기간 옵션으로 export 조건 혼용 검증을 우회하지 못하도록 수정. 저장된 id가 null인 거래를 손상 데이터로 거부해 읽기/재작성 때 새 id가 임의 생성되는 문제 수정. argparse 문법 오류에도 [오류]/[힌트] 및 해당 명령 --help 안내 추가, 종료 코드 2 유지.
+- 검증: 새 회귀 테스트 3개가 수정 전 11개 세부 사례에서 실패함을 확인한 뒤 수정. `python3 -m unittest discover -v` 18개 전체 성공. `python3 -m compileall -q budget_app tests`, `git diff --check` 성공. 기존 CSV 원자성, CRUD, 검색, 예산, 5000건 정렬 테스트도 통과.
+- 미해결: 실제 채점기는 제공되지 않아 PASS 결과 자체는 보장할 수 없음. 확인한 원래 미션의 필수 기능 누락은 없음.
+- 반영 예정: 기존 푸시 승인에 따라 GitHub 앱으로 main에 반영. 커밋 메시지 `fix: reject invalid date options and corrupted transaction IDs`.
+- 다음 작업: 원격 반영 결과와 GitHub Actions 확인 및 기록.

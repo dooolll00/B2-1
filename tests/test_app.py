@@ -174,6 +174,42 @@ class LedgerTests(unittest.TestCase):
         rows.close()
         self.assertEqual(self.service.summary("2024-01")["expense"], 5000 * 5001 // 2)
 
+    def test_empty_date_options_are_errors(self):
+        for args in (("summary", "--month", ""), ("search", "--from", ""),
+                     ("search", "--to", ""), ("budget", "list", "--month", "")):
+            with self.subTest(args=args):
+                result = self.cli(*args)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn("[힌트]", result.stderr)
+                self.assertNotIn("Traceback", result.stderr)
+        path = self.root / "existing.csv"
+        path.write_text("original")
+        result = self.cli("export", "--out", str(path), "--month", "2024-01", "--from", "")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(path.read_text(), "original")
+
+    def test_null_stored_id_is_rejected_without_rewrite(self):
+        record = self.add().record()
+        record["id"] = None
+        self.repo.write("transactions", [record])
+        before = self.repo.path("transactions").read_bytes()
+        result = self.cli("list")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("[힌트]", result.stderr)
+        with self.assertRaises(AppError):
+            self.add()
+        self.assertEqual(self.repo.path("transactions").read_bytes(), before)
+
+    def test_command_syntax_errors_include_hint(self):
+        for args in (("unknown",), ("update",), ("search", "--type", "wrong"),
+                     ("list", "--limit", "abc"), ("budget", "set")):
+            with self.subTest(args=args):
+                result = self.cli(*args)
+                self.assertEqual(result.returncode, 2)
+                self.assertIn("[오류]", result.stderr)
+                self.assertIn("[힌트]", result.stderr)
+                self.assertNotIn("Traceback", result.stderr)
+
     def test_all_help(self):
         for args in ((), ("add",), ("list",), ("search",), ("summary",), ("update",), ("delete",), ("import",), ("export",), ("category",), ("category", "add"), ("category", "list"), ("category", "remove"), ("budget",), ("budget", "set"), ("budget", "list")):
             result = self.cli(*args, "--help")

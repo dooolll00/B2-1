@@ -75,13 +75,13 @@ class BudgetService:
                  month: str | None = None, category: str | None = None,
                  type: str | None = None, q: str | None = None,
                  tag: str | None = None) -> Iterator[Transaction]:
-        if start:
+        if start is not None:
             valid_date(start)
-        if end:
+        if end is not None:
             valid_date(end)
         if start and end and start > end:
             raise AppError("시작일이 종료일보다 늦습니다. --from/--to를 확인하세요.")
-        if month:
+        if month is not None:
             valid_month(month)
         if category is not None and category not in self.categories():
             raise AppError("등록되지 않은 카테고리입니다. category list로 확인하세요.")
@@ -153,9 +153,9 @@ class BudgetService:
         return count
 
     def export_csv(self, path: Path, **filters: Any) -> int:
-        if not filters.get("month") and not (filters.get("start") and filters.get("end")):
+        if filters.get("month") is None and (filters.get("start") is None or filters.get("end") is None):
             raise AppError("내보내기 조건이 필요합니다. --month 또는 --from과 --to를 함께 지정하세요.")
-        if filters.get("month") and (filters.get("start") or filters.get("end")):
+        if filters.get("month") is not None and (filters.get("start") is not None or filters.get("end") is not None):
             raise AppError("--month와 기간 조건 중 한 방식만 선택하세요.")
         if path.resolve().parent == self.repo.directory:
             raise AppError("저장 데이터 보호를 위해 data 폴더 밖의 CSV 경로를 지정하세요.")
