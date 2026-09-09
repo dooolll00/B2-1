@@ -82,6 +82,15 @@ def parser() -> argparse.ArgumentParser:
     return root
 
 
+def percentage(expense: int, budget: int) -> str:
+    """정수 연산으로 사용률을 소수 한 자리까지 표시한다(동률은 짝수 반올림)."""
+    tenths, remainder = divmod(expense * 1000, budget)
+    if remainder * 2 > budget or (remainder * 2 == budget and tenths % 2):
+        tenths += 1
+    whole, decimal = divmod(tenths, 10)
+    return f"{whole}.{decimal}"
+
+
 def show(rows: Iterable[Transaction]) -> None:
     found = False
     for t in rows:
@@ -146,7 +155,7 @@ def main() -> int:
                 print("데이터 없음")
             print(f"총 수입: {s['income']}원\n총 지출: {s['expense']}원\n잔액: {s['income'] - s['expense']}원")
             if s["budget"] is not None:
-                print(f"예산: {s['budget']}원 (사용률 {s['expense'] / s['budget'] * 100:.1f}%)")
+                print(f"예산: {s['budget']}원 (사용률 {percentage(s['expense'], s['budget'])}%)")
                 if s["expense"] > s["budget"]:
                     print("[경고] 예산 초과!")
             print(f"지출 TOP {top}")

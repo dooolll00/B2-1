@@ -134,6 +134,7 @@ class BudgetService:
 
     def import_csv(self, path: Path) -> int:
         count = 0
+        category_names = set(self.categories())
         def imported() -> Iterator[dict[str, Any]]:
             nonlocal count
             with path.open(encoding="utf-8-sig", newline="") as stream:
@@ -145,7 +146,10 @@ class BudgetService:
                     try:
                         if None in row or any(v is None for v in row.values()):
                             raise AppError("열 개수가 맞지 않습니다. 쉼표가 있는 값은 큰따옴표로 감싸세요.")
-                        yield self.checked(**row).record()
+                        transaction = Transaction.create(**row)
+                        if transaction.category not in category_names:
+                            raise AppError("등록되지 않은 카테고리입니다. category list 또는 category add를 사용하세요.")
+                        yield transaction.record()
                         count += 1
                     except (AppError, TypeError, ValueError) as exc:
                         raise AppError(f"CSV {reader.line_num}행 오류: {exc} 전체 가져오기를 취소했습니다.") from exc

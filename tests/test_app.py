@@ -83,6 +83,36 @@ class LedgerTests(unittest.TestCase):
         self.assertIn("예산 초과", result.stdout)
         self.assertIn("데이터 없음", self.cli("summary", "--month", "2025-01").stdout)
 
+    def test_summary_large_amounts(self):
+        self.add(amount=10 ** 309)
+        self.service.set_budget("2024-01", "1")
+        result = self.cli("summary", "--month", "2024-01")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn(f"사용률 {10 ** 311}.0%", result.stdout)
+        self.assertIn("예산 초과", result.stdout)
+        self.assertNotIn("Traceback", result.stderr)
+
+    def test_summary_percentage_rounding(self):
+        t = self.add(amount=1)
+        for expense, budget, expected in ((1, 16, "6.2"), (3, 16, "18.8"),
+                                           (1, 3, "33.3"), (2, 3, "66.7")):
+            with self.subTest(expense=expense, budget=budget):
+                self.service.change(t.id, {"amount": expense})
+                self.service.set_budget("2024-01", str(budget))
+                result = self.cli("summary", "--month", "2024-01")
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertIn(f"사용률 {expected}%", result.stdout)
+
+    def test_import_unknown_category_rolls_back(self):
+        self.add()
+        before = self.repo.path("transactions").read_bytes()
+        path = self.root / "invalid-category.csv"
+        path.write_text("date,type,category,amount\n2024-01-01,expense,food,100\n"
+                        "2024-01-02,expense,missing,200\n", encoding="utf-8")
+        with self.assertRaisesRegex(AppError, "CSV 3행 오류"):
+            self.service.import_csv(path)
+        self.assertEqual(self.repo.path("transactions").read_bytes(), before)
+
     def test_csv_roundtrip_and_atomic_failure(self):
         t = self.add(memo='한글, "메모"\n둘째 줄')
         path = self.root / "export.csv"
