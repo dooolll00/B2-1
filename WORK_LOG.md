@@ -236,3 +236,37 @@
 - 검증: git fetch 및 git diff origin/main --exit-code 성공으로 로컬/원격 파일 일치 확인. 인덱스 일치 확인 후 파일 변경 없는 soft reset으로 로컬 main 동기화. 직전 테스트 21개 성공 결과 유효.
 - 미해결: 현재 커밋의 원격 CI 결과 및 실제 채점은 미확인.
 - 다음 작업: 필요 시 GitHub Actions 및 제출 안내 확인. 이 결과 기록은 `docs: record budget fixes delivery`로 원격에 추가 반영.
+
+
+## 2026-09-10 15:25 KST — B1-1의 비전공자용 정리 방식 적용
+
+- 요청: B1-1에서 정리한 미션 핵심·발표 설명·파일 역할·테스트 구분·README 구성을 B2-1에도 적용한다.
+- 기준: 이 파일의 2026-09-09T14:57:31 원문 요약. B1-1의 웹 미션 조건을 가져오지 않고 Python 콘솔 가계부 조건에 맞췄다. 기존 미션 요약은 보존하여 계속 기준으로 사용한다.
+- 변경 파일: FILE_GUIDE.md·MISSION_GUIDE.md 추가, PRESENTATION_GUIDE.md·README.md·tests/test_app.py·WORK_LOG.md 수정.
+- 핵심 작업: 핵심 models/storage/service/cli와 진입 파일, 문서·예제·설정·실행 데이터·검사 파일의 역할을 설명했다. 단계별 학습 흐름, 쉬운 5~7분 발표 대본, 원문 전체 설명 준비표를 추가했다. README의 구현 체크리스트는 발표 가이드로 이동하고 실행·저장·명령·CSV·안전성·검증 설명을 유지했다. README에는 파일/미션/발표 가이드 안내를 추가하지 않았다.
+- 테스트 파일: Python 표준 unittest 기반 개발용 검사임을 설명하고 기능별 주석 추가. AST 비교로 실행 구문 동일 확인. budget_app 실행 코드와 저장 정책·기능은 변경하지 않았다.
+- 검증: python3.12 -m unittest discover -v 전체 21개 통과. 임시 폴더만 사용하여 사용자 가계부 데이터는 건드리지 않았다. Markdown 로컬 링크·코드 블록·README 범위 검사, git diff --check 통과.
+- 현재 상태: 이 위치는 budget_app을 포함한 실제 프로젝트 루트다. 과거 기록의 중첩 경로·시작 전 상태는 당시 이력으로 남긴다. 이번 문서 정리는 로컬 완료 상태다.
+- 미해결/다음 작업: 실제 채점·현재 원격 CI는 확인하지 않았다. FILE_GUIDE로 역할을 읽고 MISSION_GUIDE로 공부한 뒤 PRESENTATION_GUIDE로 시연을 연습한다.
+- Git commit/push: 이번 요청에서는 수행하지 않음.
+
+
+## 2026-09-10 15:28 KST — 기존 기능을 유지한 코드 가독성 정리
+
+- 요청: 검토에서 제안한 검색 조건·명령 처리·거래 변환의 단순화를 적용한다.
+- 변경 파일: budget_app/cli.py, budget_app/service.py, README.md, FILE_GUIDE.md, MISSION_GUIDE.md, PRESENTATION_GUIDE.md, WORK_LOG.md. 기존 미커밋 문서와 테스트 주석은 보존했다.
+- 핵심 작업: cli.main의 각 명령을 run_명령 함수로 분리하고 import를 상단으로 이동했다. add/update 입력을 반복문과 중간 변수로 풀고 요약 정렬을 별도 변수로 나타냈다. filtered의 긴 AND 조건을 순차 검사/continue로 변경했다. 거래 추가·수정의 변환 과정을 중간 변수로 표현했다. 문서에 새 코드 읽는 흐름을 반영했다.
+- 유지 범위: 모든 명령·출력·검증·종료 코드, 스트리밍과 최신순 정렬, JSONL 저장, 잠금, 원자적 교체, CSV 전체 취소, 큰 정수 사용률 계산. 기능을 삭제하거나 제한하지 않았다.
+- 검증: python3.12 -m unittest discover -v 기존 21개 모두 통과, git diff --check 통과. 테스트는 임시 폴더를 사용했으며 사용자 가계부 데이터를 변경하지 않았다.
+- 미해결/다음 작업: 로컬 코드 정리 완료. 새 함수 흐름으로 설명을 연습하고 요청 시 원격 반영한다. 실제 채점·현재 원격 CI는 확인하지 않았다.
+- Git commit/push: 수행하지 않음.
+
+
+## 2026-09-10 15:30 KST — 누적 변경 GitHub 반영
+
+- 요청: 지금까지 변경한 B1-1과 B2-1 파일을 모두 푸시한다.
+- 범위: 기능을 유지한 코드 정리, README 정리, 파일·미션·발표 가이드, 테스트 설명 및 작업 기록의 누적 변경 전체.
+- 검증: git fetch 후 HEAD와 origin/main 차이 0/0, git diff --check 통과. 앞선 B1-1 Chrome 27개 및 B2-1 unittest 21개 통과 이후 기능 코드 추가 변경 없음.
+- 반영 방법: 터미널 git push --dry-run에서 쓰기 인증 부재 확인. 인증된 GitHub 앱으로 커밋을 만들고 force 없이 main에 반영한다. 결과와 실제 커밋은 후속 기록으로 남긴다.
+- 커밋 메시지: refactor: simplify code and improve beginner documentation
+- 현재 단계: 업로드 시작 전 기록. 원격 반영·로컬 동기화 결과 확인이 남아 있다.

@@ -51,7 +51,9 @@ class BudgetService:
 
     def add(self, **values: Any) -> Transaction:
         t = self.checked(**values)
-        self.repo.write("transactions", (x.record() for x in chain(self.repo.transactions(), [t])))
+        transactions = chain(self.repo.transactions(), [t])
+        records = (transaction.record() for transaction in transactions)
+        self.repo.write("transactions", records)
         return t
 
     def change(self, id: str, values: dict[str, Any] | None) -> None:
@@ -64,7 +66,10 @@ class BudgetService:
                         raise AppError("중복 id로 파일이 손상되었습니다. 백업을 복원하세요.")
                     found = True
                     if values is not None:
-                        yield self.checked(**(t.record() | values)).record()
+                        updated_values = t.record()
+                        updated_values.update(values)
+                        updated = self.checked(**updated_values)
+                        yield updated.record()
                 else:
                     yield t.record()
             if not found:
@@ -86,8 +91,22 @@ class BudgetService:
         if category is not None and category not in self.categories():
             raise AppError("등록되지 않은 카테고리입니다. category list로 확인하세요.")
         for t in self.repo.transactions():
-            if (not start or t.date >= start) and (not end or t.date <= end) and (not month or t.date.startswith(month)) and (category is None or t.category == category) and (not type or t.type == type) and (q is None or q.casefold() in t.memo.casefold()) and (tag is None or tag in t.tags):
-                yield t
+            # 조건에 맞지 않으면 다음 거래로 넘어갑니다. 모두 통과한 거래만 전달합니다.
+            if start and t.date < start:
+                continue
+            if end and t.date > end:
+                continue
+            if month and not t.date.startswith(month):
+                continue
+            if category is not None and t.category != category:
+                continue
+            if type and t.type != type:
+                continue
+            if q is not None and q.casefold() not in t.memo.casefold():
+                continue
+            if tag is not None and tag not in t.tags:
+                continue
+            yield t
 
     def newest(self, limit: int | None = None, **filters: Any) -> Iterator[Transaction]:
         if limit is not None:

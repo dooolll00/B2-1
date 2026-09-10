@@ -1,3 +1,10 @@
+"""가계부 자동 검사: 사이트가 아닌 Python 명령과 파일 저장을 확인합니다.
+
+B2-1 루트에서 Python 3.10 이상으로 실행: python3.12 -m unittest discover -v
+표준 라이브러리 unittest만 사용하며 각 검사는 새로운 임시 폴더를 사용합니다.
+앱 실행에 필요한 파일은 아니며, 수정 후 기능과 데이터 보호를 확인하는 도구입니다.
+setUp은 준비, test_ 함수는 검사, assert는 예상 결과 확인입니다.
+"""
 import csv
 import json
 from pathlib import Path
@@ -27,6 +34,7 @@ class LedgerTests(unittest.TestCase):
     def cli(self, *args, input=None):
         return subprocess.run([sys.executable, "-m", "budget_app", "--data-dir", str(self.repo.directory), *args], input=input, capture_output=True, text=True)
 
+    # 01. 초기화·입력 검증·조회·수정/삭제·카테고리 보호
     def test_initialization_and_persistence(self):
         self.assertEqual(len(list(self.repo.directory.glob("*.jsonl"))), 3)
         t = self.add()
@@ -70,6 +78,7 @@ class LedgerTests(unittest.TestCase):
         self.service.category("remove", "books")
         self.assertNotIn("books", self.service.categories())
 
+    # 02. 예산·요약·큰 금액 및 반올림
     def test_summary_budget_persistence(self):
         self.add(amount=150)
         self.add(amount=1000, type="income", category="salary")
@@ -103,6 +112,7 @@ class LedgerTests(unittest.TestCase):
                 self.assertEqual(result.returncode, 0, result.stderr)
                 self.assertIn(f"사용률 {expected}%", result.stdout)
 
+    # 03. CSV 가져오기/내보내기와 오류 시 원본 보존
     def test_import_unknown_category_rolls_back(self):
         self.add()
         before = self.repo.path("transactions").read_bytes()
@@ -138,6 +148,7 @@ class LedgerTests(unittest.TestCase):
         with self.assertRaises(AppError):
             self.service.export_csv(self.repo.path("transactions"), month="2024-01")
 
+    # 04. 파일 교체 실패·손상 데이터·동시 작업 잠금
     def test_replace_failure_preserves_original(self):
         self.add()
         before = self.repo.path("transactions").read_bytes()
@@ -162,6 +173,7 @@ class LedgerTests(unittest.TestCase):
                     pass
         self.assertFalse((self.repo.directory / ".lock").exists())
 
+    # 05. 실제 명령 실행·입력·종료 코드·전체 흐름
     def test_cli_interactive_and_errors(self):
         result = self.cli("add", input="2024-01-01\nexpense\nfood\n1200\n점심\nmeal\n")
         self.assertEqual(result.returncode, 0, result.stderr)
@@ -195,6 +207,7 @@ class LedgerTests(unittest.TestCase):
         ok("category", "remove", "--name", "books")
         self.assertEqual(len(list(self.repo.transactions())), 3)
 
+    # 06. 대량 정렬·빈 날짜·손상 id·문법 오류·도움말
     def test_large_streaming_order(self):
         # 날짜가 뒤섞인 파일에서도 제한 조회와 디스크 정렬의 결과가 같아야 한다.
         self.repo.write("transactions", (Transaction.create(id=f"TX-{i}", type="expense", date=f"2024-01-{i % 28 + 1:02}", category="food", amount=i + 1).record() for i in range(5000)))

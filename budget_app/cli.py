@@ -1,12 +1,13 @@
 """명령 파싱과 콘솔 출력. update는 옵션 입력으로 고정."""
 import argparse
 import csv
+import json
 from functools import wraps
 from pathlib import Path
 import sys
 import sqlite3
 from typing import Callable, Iterable, NoReturn
-from .models import AppError, Transaction, positive
+from .models import AppError, Transaction, positive, valid_month
 from .service import BudgetService
 from .storage import Repository
 
@@ -95,12 +96,100 @@ def show(rows: Iterable[Transaction]) -> None:
     found = False
     for t in rows:
         found = True
-        # JSON escaping prevents embedded line breaks / control characters from breaking rows.
-        import json
+        # 메모의 줄바꿈·제어 문자가 출력 행을 깨지 않도록 문자로 표시합니다.
         memo = json.dumps(t.memo, ensure_ascii=False)
         print(f"{t.id} | {t.date} | {t.type:7} | {t.category} | {t.amount} | {memo} | {','.join(t.tags)}")
     if not found:
         print("데이터 없음")
+
+
+# 명령별 입력과 출력을 담당합니다. 실제 가계부 규칙은 service에 있습니다.
+def run_add(args: argparse.Namespace, service: BudgetService) -> None:
+    print("등록된 카테고리: " + ", ".join(service.categories()))
+    prompts = (
+        ("date", "날짜(YYYY-MM-DD): "),
+        ("type", "타입(income/expense): "),
+        ("category", "카테고리: "),
+        ("amount", "금액(양수 정수): "),
+        ("memo", "메모(선택): "),
+        ("tags", "태그(쉼표로 구분, 선택): "),
+    )
+    values = {}
+    for key, prompt in prompts:
+        values[key] = input(prompt).strip()
+    transaction = service.add(**values)
+    print(f"[저장 완료] id={transaction.id}")
+
+
+def run_list(args: argparse.Namespace, service: BudgetService) -> None:
+    show(service.newest(limit=args.limit))
+
+
+def run_search(args: argparse.Namespace, service: BudgetService) -> None:
+    show(service.newest(limit=args.limit, start=getattr(args, "from"), end=args.to,
+                        category=args.category, type=args.type, q=args.q, tag=args.tag))
+
+
+def run_update(args: argparse.Namespace, service: BudgetService) -> None:
+    values = {}
+    for key in ("date", "type", "category", "amount", "memo", "tags"):
+        value = getattr(args, key)
+        if value is not None:
+            values[key] = value
+    if not values:
+        raise AppError("수정할 필드가 없습니다. --amount 등 수정 옵션을 지정하세요.")
+    service.change(args.id, values)
+    print(f"[수정 완료] id={args.id}")
+
+
+def run_delete(args: argparse.Namespace, service: BudgetService) -> None:
+    service.change(args.id, None)
+    print(f"[삭제 완료] id={args.id}")
+
+
+def run_category(args: argparse.Namespace, service: BudgetService) -> None:
+    if args.action == "list":
+        print("\n".join("- " + n for n in service.categories()) or "카테고리 없음")
+    else:
+        name = args.name if args.name is not None else input("카테고리명: ")
+        service.category(args.action, name)
+        print(f"[완료] category {args.action}: {name}")
+
+
+def run_budget(args: argparse.Namespace, service: BudgetService) -> None:
+    if args.action == "set":
+        service.set_budget(args.month, args.amount)
+        print(f"[저장 완료] {args.month} 예산 {args.amount}원")
+    else:
+        if args.month is not None:
+            valid_month(args.month)
+        rows = [(m, a) for m, a in sorted(service.budgets().items()) if not args.month or m == args.month]
+        print("\n".join(f"{m}: {a}원" for m, a in rows) or "설정된 예산 없음")
+
+
+def run_summary(args: argparse.Namespace, service: BudgetService) -> None:
+    top = positive(args.top)
+    s = service.summary(args.month)
+    if not s["count"]:
+        print("데이터 없음")
+    print(f"총 수입: {s['income']}원\n총 지출: {s['expense']}원\n잔액: {s['income'] - s['expense']}원")
+    if s["budget"] is not None:
+        print(f"예산: {s['budget']}원 (사용률 {percentage(s['expense'], s['budget'])}%)")
+        if s["expense"] > s["budget"]:
+            print("[경고] 예산 초과!")
+    print(f"지출 TOP {top}")
+    ranked = sorted(s["categories"].items(), key=lambda item: (-item[1], item[0]))
+    for i, (name, amount) in enumerate(ranked[:top], 1):
+        print(f"{i}) {name} {amount}원")
+
+
+def run_import(args: argparse.Namespace, service: BudgetService) -> None:
+    print(f"[완료] imported={service.import_csv(Path(args.source))}, skipped=0")
+
+
+def run_export(args: argparse.Namespace, service: BudgetService) -> None:
+    count = service.export_csv(Path(args.out), month=args.month, start=getattr(args, "from"), end=args.to)
+    print(f"[완료] {args.out} ({count} records)")
 
 
 @handle_errors
@@ -111,59 +200,23 @@ def main() -> int:
         service = BudgetService(repo)
         command = args.command
         if command == "add":
-            print("등록된 카테고리: " + ", ".join(service.categories()))
-            values = {key: input(prompt).strip() for key, prompt in (
-                ("date", "날짜(YYYY-MM-DD): "), ("type", "타입(income/expense): "),
-                ("category", "카테고리: "), ("amount", "금액(양수 정수): "),
-                ("memo", "메모(선택): "), ("tags", "태그(쉼표로 구분, 선택): "))}
-            print(f"[저장 완료] id={service.add(**values).id}")
+            run_add(args, service)
         elif command == "list":
-            show(service.newest(limit=args.limit))
+            run_list(args, service)
         elif command == "search":
-            show(service.newest(limit=args.limit, start=getattr(args, "from"), end=args.to,
-                                category=args.category, type=args.type, q=args.q, tag=args.tag))
+            run_search(args, service)
         elif command == "update":
-            values = {key: getattr(args, key) for key in ("date", "type", "category", "amount", "memo", "tags") if getattr(args, key) is not None}
-            if not values:
-                raise AppError("수정할 필드가 없습니다. --amount 등 수정 옵션을 지정하세요.")
-            service.change(args.id, values)
-            print(f"[수정 완료] id={args.id}")
+            run_update(args, service)
         elif command == "delete":
-            service.change(args.id, None)
-            print(f"[삭제 완료] id={args.id}")
+            run_delete(args, service)
         elif command == "category":
-            if args.action == "list":
-                print("\n".join("- " + n for n in service.categories()) or "카테고리 없음")
-            else:
-                name = args.name if args.name is not None else input("카테고리명: ")
-                service.category(args.action, name)
-                print(f"[완료] category {args.action}: {name}")
+            run_category(args, service)
         elif command == "budget":
-            if args.action == "set":
-                service.set_budget(args.month, args.amount)
-                print(f"[저장 완료] {args.month} 예산 {args.amount}원")
-            else:
-                from .models import valid_month
-                if args.month is not None:
-                    valid_month(args.month)
-                rows = [(m, a) for m, a in sorted(service.budgets().items()) if not args.month or m == args.month]
-                print("\n".join(f"{m}: {a}원" for m, a in rows) or "설정된 예산 없음")
+            run_budget(args, service)
         elif command == "summary":
-            top = positive(args.top)
-            s = service.summary(args.month)
-            if not s["count"]:
-                print("데이터 없음")
-            print(f"총 수입: {s['income']}원\n총 지출: {s['expense']}원\n잔액: {s['income'] - s['expense']}원")
-            if s["budget"] is not None:
-                print(f"예산: {s['budget']}원 (사용률 {percentage(s['expense'], s['budget'])}%)")
-                if s["expense"] > s["budget"]:
-                    print("[경고] 예산 초과!")
-            print(f"지출 TOP {top}")
-            for i, (name, amount) in enumerate(sorted(s["categories"].items(), key=lambda item: (-item[1], item[0]))[:top], 1):
-                print(f"{i}) {name} {amount}원")
+            run_summary(args, service)
         elif command == "import":
-            print(f"[완료] imported={service.import_csv(Path(args.source))}, skipped=0")
+            run_import(args, service)
         elif command == "export":
-            count = service.export_csv(Path(args.out), month=args.month, start=getattr(args, "from"), end=args.to)
-            print(f"[완료] {args.out} ({count} records)")
+            run_export(args, service)
     return 0
