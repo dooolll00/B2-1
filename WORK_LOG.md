@@ -302,3 +302,14 @@
 - 미해결: 이번 수정 범위에서 없음. 실제 채점은 실행하지 않음.
 - 다음 작업: 필요 시 후속 요청에 따라 원격 반영.
 - Git commit/push: 수행하지 않음.
+
+## 2026-09-23 14:50 KST — 중복 제거 커밋 및 GitHub 반영 완료
+
+- 요청: 수정 사항 커밋 및 푸시.
+- 수정 파일: budget_app/models.py, budget_app/cli.py, WORK_LOG.md.
+- 핵심 작업: 중복 검사 두 곳과 누적 작업 기록을 커밋. 터미널 HTTPS push는 인증 부재로 실패하여 연결된 GitHub 앱으로 main에 반영.
+- 로컬 커밋: 9e3536d. 원격 커밋: 071de201f673cd75cf05d3d24f91f71a899b176f. 메시지: refactor: remove redundant validation checks.
+- push 여부: 앱으로 main 갱신 성공(force=false).
+- 검증: git fetch 성공 및 git diff origin/main --exit-code 성공으로 파일 일치 확인. 직전 테스트 21개 통과 결과 유효, git diff --check 통과.
+- 미해결: 이번 반영 범위에서 없음. 원격 CI와 실제 채점은 확인하지 않음.
+- 다음 작업: 이 결과 기록을 docs: record redundant checks delivery 메시지로 추가 반영하고 로컬 main 동기화. 원래 로컬 커밋은 보존 브랜치로 유지.
