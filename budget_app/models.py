@@ -28,7 +28,7 @@ def valid_month(value: str) -> str:
 
 
 def positive(value: Any) -> int:
-    if isinstance(value, bool) or not re.fullmatch(r"[0-9]+", str(value)) or int(value) <= 0:
+    if not re.fullmatch(r"[0-9]+", str(value)) or int(value) <= 0:
         raise AppError("금액/개수는 양수 정수여야 합니다. 1 이상의 정수를 입력하세요.")
     return int(value)
 

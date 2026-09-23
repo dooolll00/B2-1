@@ -18,7 +18,7 @@ def handle_errors(function: Callable[[], int]) -> Callable[[], int]:
     def wrapped() -> int:
         try:
             return function()
-        except (AppError, OSError, UnicodeError, csv.Error, ValueError, sqlite3.Error) as exc:
+        except (AppError, OSError, csv.Error, ValueError, sqlite3.Error) as exc:
             print(f"[오류] {exc}\n[힌트] 입력값, 파일 형식과 접근 권한을 확인하고 --help를 참고하세요.", file=sys.stderr)
             return 1
         except (EOFError, KeyboardInterrupt):
