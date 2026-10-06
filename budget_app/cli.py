@@ -12,8 +12,10 @@ from .service import BudgetService
 from .storage import Repository
 
 
+# 데코레이터는 main 실행을 감싸 공통 오류 처리를 한곳에 모읍니다.
 def handle_errors(function: Callable[[], int]) -> Callable[[], int]:
     """공통 오류를 스택트레이스 없는 메시지와 실패 코드로 변환한다."""
+    # 감싼 뒤에도 원래 함수의 이름과 설명을 유지합니다.
     @wraps(function)
     def wrapped() -> int:
         try:
@@ -35,12 +37,14 @@ class ArgumentParser(argparse.ArgumentParser):
         self.exit(2, f"[오류] {message}\n[힌트] {self.prog} --help로 필수 옵션과 허용 값을 확인하세요.\n")
 
 
+# 명령·옵션·기본값을 등록합니다. argparse가 입력을 해석하고 --help도 만들어 줍니다.
 def parser() -> argparse.ArgumentParser:
     root = ArgumentParser(description="파일 기반 콘솔 가계부 (Python 표준 라이브러리)")
     root.add_argument("--data-dir", default="./data", help="JSONL 저장 폴더 (기본: ./data)")
     commands = root.add_subparsers(dest="command", required=True)
     def command(name: str, help: str) -> argparse.ArgumentParser:
         p = commands.add_parser(name, help=help, description=help)
+        # 명령 뒤에도 폴더를 지정할 수 있습니다. 생략하면 최상위 설정을 덮어쓰지 않습니다.
         p.add_argument("--data-dir", default=argparse.SUPPRESS, help="JSONL 저장 폴더")
         return p
     command("add", "거래 대화형 추가")
@@ -83,15 +87,19 @@ def parser() -> argparse.ArgumentParser:
     return root
 
 
+# 큰 금액도 안전하게 계산하도록 float로 바꾸지 않고 정수 나눗셈을 사용합니다.
 def percentage(expense: int, budget: int) -> str:
     """정수 연산으로 사용률을 소수 한 자리까지 표시한다(동률은 짝수 반올림)."""
+    # 1000을 곱하면 백분율의 소수 첫째 자리까지 정수로 계산합니다. divmod는 몫과 나머지를 줍니다.
     tenths, remainder = divmod(expense * 1000, budget)
+    # 절반보다 크면 올리고, 정확히 절반이면 마지막 자리가 짝수가 되도록 반올림합니다.
     if remainder * 2 > budget or (remainder * 2 == budget and tenths % 2):
         tenths += 1
     whole, decimal = divmod(tenths, 10)
     return f"{whole}.{decimal}"
 
 
+# 거래를 차례로 받아 출력하고, 결과가 하나도 없으면 데이터 없음으로 알립니다.
 def show(rows: Iterable[Transaction]) -> None:
     found = False
     for t in rows:
@@ -117,6 +125,7 @@ def run_add(args: argparse.Namespace, service: BudgetService) -> None:
     values = {}
     for key, prompt in prompts:
         values[key] = input(prompt).strip()
+    # **values는 딕셔너리를 date=..., amount=... 같은 이름 있는 인자로 전달합니다.
     transaction = service.add(**values)
     print(f"[저장 완료] id={transaction.id}")
 
@@ -125,11 +134,13 @@ def run_list(args: argparse.Namespace, service: BudgetService) -> None:
     show(service.newest(limit=args.limit))
 
 
+# from은 Python 예약어이므로 args.from 대신 getattr로 옵션 값을 꺼냅니다.
 def run_search(args: argparse.Namespace, service: BudgetService) -> None:
     show(service.newest(limit=args.limit, start=getattr(args, "from"), end=args.to,
                         category=args.category, type=args.type, q=args.q, tag=args.tag))
 
 
+# 지정한 필드만 수정합니다. None은 옵션 생략, 빈 문자열은 메모·태그 등을 비우는 요청입니다.
 def run_update(args: argparse.Namespace, service: BudgetService) -> None:
     values = {}
     for key in ("date", "type", "category", "amount", "memo", "tags"):
@@ -142,6 +153,7 @@ def run_update(args: argparse.Namespace, service: BudgetService) -> None:
     print(f"[수정 완료] id={args.id}")
 
 
+# None을 전달해 서비스의 공통 수정/삭제 함수에서 삭제 흐름을 선택합니다.
 def run_delete(args: argparse.Namespace, service: BudgetService) -> None:
     service.change(args.id, None)
     print(f"[삭제 완료] id={args.id}")
@@ -167,6 +179,7 @@ def run_budget(args: argparse.Namespace, service: BudgetService) -> None:
         print("\n".join(f"{m}: {a}원" for m, a in rows) or "설정된 예산 없음")
 
 
+# 서비스의 합계를 표시하고 예산 초과 여부와 카테고리별 지출 순위를 출력합니다.
 def run_summary(args: argparse.Namespace, service: BudgetService) -> None:
     top = positive(args.top)
     s = service.summary(args.month)
@@ -178,6 +191,7 @@ def run_summary(args: argparse.Namespace, service: BudgetService) -> None:
         if s["expense"] > s["budget"]:
             print("[경고] 예산 초과!")
     print(f"지출 TOP {top}")
+    # 금액 앞의 마이너스로 큰 지출부터 정렬합니다. 동률이면 카테고리 이름순입니다.
     ranked = sorted(s["categories"].items(), key=lambda item: (-item[1], item[0]))
     for i, (name, amount) in enumerate(ranked[:top], 1):
         print(f"{i}) {name} {amount}원")
@@ -192,10 +206,12 @@ def run_export(args: argparse.Namespace, service: BudgetService) -> None:
     print(f"[완료] {args.out} ({count} records)")
 
 
+# 실행 흐름: 명령 해석 → 저장소 준비·잠금 → 서비스 처리 → 결과 출력 → 잠금 해제.
 @handle_errors
 def main() -> int:
     args = parser().parse_args()
     repo = Repository(Path(args.data_dir))
+    # with 안의 작업이 같은 잠금을 사용하며, 오류가 나도 session의 finally에서 해제합니다.
     with repo.session():
         service = BudgetService(repo)
         command = args.command

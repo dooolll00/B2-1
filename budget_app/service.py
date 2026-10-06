@@ -13,10 +13,12 @@ from .storage import Repository, atomic_output
 CSV_FIELDS = ("date", "type", "category", "amount", "memo", "tags")
 
 
+# 가계부의 업무 규칙을 담당합니다. 실제 파일 읽기·쓰기는 Repository에 맡깁니다.
 class BudgetService:
     def __init__(self, repository: Repository):
         self.repo = repository
 
+    # 거래와 달리 작은 설정 목록인 카테고리는 리스트로 관리합니다.
     def categories(self) -> list[str]:
         result = []
         for row in self.repo.records("categories"):
@@ -38,11 +40,13 @@ class BudgetService:
         else:
             if name not in names:
                 raise AppError("없는 카테고리입니다. category list로 확인하세요.")
+            # 기존 거래가 사용하는 분류를 지우면 연결이 끊어지므로 삭제를 막습니다.
             if any(t.category == name for t in self.repo.transactions()):
                 raise AppError("사용 중인 카테고리입니다. 거래를 수정/삭제한 뒤 다시 시도하세요.")
             names.remove(name)
         self.repo.write("categories", ({"name": n} for n in names))
 
+    # 모델의 입력 검사에 더해, 카테고리가 실제 등록되어 있는지 확인합니다.
     def checked(self, **values: Any) -> Transaction:
         t = Transaction.create(**values)
         if t.category not in self.categories():
@@ -51,31 +55,38 @@ class BudgetService:
 
     def add(self, **values: Any) -> Transaction:
         t = self.checked(**values)
+        # chain은 기존 거래를 읽은 뒤 새 거래를 전달합니다. 전체 거래 리스트를 만들지 않습니다.
         transactions = chain(self.repo.transactions(), [t])
         records = (transaction.record() for transaction in transactions)
         self.repo.write("transactions", records)
         return t
 
+    # 수정과 삭제는 같은 파일 재작성 흐름을 씁니다. values가 None이면 삭제입니다.
     def change(self, id: str, values: dict[str, Any] | None) -> None:
         found = False
         def rows() -> Iterator[dict[str, Any]]:
+            # 안쪽 함수에서도 바깥의 found를 바꿔 대상 거래를 찾았는지 기록합니다.
             nonlocal found
             for t in self.repo.transactions():
                 if t.id == id:
                     if found:
                         raise AppError("중복 id로 파일이 손상되었습니다. 백업을 복원하세요.")
                     found = True
+                    # 수정이면 바뀐 거래를 전달합니다. 삭제이면 전달하지 않아 새 파일에서 빠집니다.
                     if values is not None:
                         updated_values = t.record()
+                        # 요청한 필드만 바꾸고 나머지 값과 id는 유지합니다.
                         updated_values.update(values)
                         updated = self.checked(**updated_values)
                         yield updated.record()
                 else:
                     yield t.record()
+            # 없는 id 오류도 임시 파일 작성 중에 발생하므로 원본은 교체되지 않습니다.
             if not found:
                 raise AppError("없는 데이터입니다. list에서 id를 확인하세요.")
         self.repo.write("transactions", rows())
 
+    # 모든 검색 조건을 만족하는 거래만 한 건씩 전달합니다(AND 검색).
     def filtered(self, *, start: str | None = None, end: str | None = None,
                  month: str | None = None, category: str | None = None,
                  type: str | None = None, q: str | None = None,
@@ -108,22 +119,27 @@ class BudgetService:
                 continue
             yield t
 
+    # 최신순 정렬에는 전체 후보 확인이 필요합니다. limit 유무에 따라 메모리 절약 방법을 나눕니다.
     def newest(self, limit: int | None = None, **filters: Any) -> Iterator[Transaction]:
         if limit is not None:
             # 거래일이 같으면 파일 뒤에 추가된 거래를 먼저 표시. 메모리 O(limit).
+            # nlargest는 최신 N건의 후보만 보관하며, enumerate의 순번으로 같은 날짜의 순서를 정합니다.
             rows = heapq.nlargest(positive(limit), enumerate(self.filtered(**filters)), key=lambda item: (item[1].date, item[0]))
             yield from (t for _, t in rows)
         else:
             # 무제한 검색도 메모리에 전체 목록을 올리지 않는다. 디스크 임시 정렬.
+            # SQLite는 표준 라이브러리이며 임시 정렬에만 씁니다. 영구 저장은 JSONL입니다.
             with tempfile.TemporaryDirectory(prefix="budget-sort-") as directory:
                 with sqlite3.connect(str(Path(directory) / "sort.db")) as db:
                     db.execute("PRAGMA temp_store=FILE")
                     db.execute("PRAGMA cache_size=-2048")
                     db.execute("CREATE TABLE rows (seq INTEGER, date TEXT, record TEXT)")
                     db.executemany("INSERT INTO rows VALUES (?, ?, ?)", ((i, t.date, json.dumps(t.record())) for i, t in enumerate(self.filtered(**filters))))
+                    # 정렬 결과도 한 건씩 전달합니다. with가 끝나면 임시 폴더를 정리합니다.
                     for (record,) in db.execute("SELECT record FROM rows ORDER BY date DESC, seq DESC"):
                         yield Transaction.create(**json.loads(record))
 
+    # 월을 키로, 금액을 값으로 읽어 해당 월의 예산을 쉽게 찾게 합니다.
     def budgets(self) -> dict[str, int]:
         result = {}
         for row in self.repo.records("budgets"):
@@ -136,9 +152,11 @@ class BudgetService:
     def set_budget(self, month: str, amount: str) -> None:
         month, amount_value = valid_month(month), positive(amount)
         budgets = self.budgets()
+        # 같은 월은 갱신하고, 새로운 월은 추가한 뒤 파일에 저장합니다.
         budgets[month] = amount_value
         self.repo.write("budgets", ({"month": m, "amount": a} for m, a in sorted(budgets.items())))
 
+    # 거래를 모아 두지 않고 합계만 누적합니다. 카테고리별 합계에는 지출만 포함합니다.
     def summary(self, month: str) -> dict[str, Any]:
         income = expense = count = 0
         categories: dict[str, int] = {}
@@ -151,12 +169,15 @@ class BudgetService:
                 categories[t.category] = categories.get(t.category, 0) + t.amount
         return dict(income=income, expense=expense, count=count, categories=categories, budget=self.budgets().get(month))
 
+    # 한 행이라도 잘못되면 전체 가져오기를 취소하는 정책입니다.
     def import_csv(self, path: Path) -> int:
         count = 0
+        # CSV 행마다 분류 파일을 다시 읽지 않도록 목록을 한 번 준비합니다.
         category_names = set(self.categories())
         def imported() -> Iterator[dict[str, Any]]:
             nonlocal count
             with path.open(encoding="utf-8-sig", newline="") as stream:
+                # 첫 줄의 열 이름을 키로 사용합니다. 필수 4개 열과 허용된 선택 열을 검사합니다.
                 reader = csv.DictReader(stream, strict=True)
                 headers = reader.fieldnames
                 if not headers or not set(CSV_FIELDS[:4]).issubset(headers) or len(headers) != len(set(headers)) or set(headers) - set(CSV_FIELDS):
@@ -172,9 +193,11 @@ class BudgetService:
                         count += 1
                     except (AppError, TypeError, ValueError) as exc:
                         raise AppError(f"CSV {reader.line_num}행 오류: {exc} 전체 가져오기를 취소했습니다.") from exc
+        # 기존 거래와 새 행을 임시 파일에 씁니다. 모든 행이 통과해야 원본에 반영됩니다.
         self.repo.write("transactions", chain((t.record() for t in self.repo.transactions()), imported()))
         return count
 
+    # 월 또는 시작·종료일 조건을 요구하고 저장 데이터 폴더 밖으로 CSV를 내보냅니다.
     def export_csv(self, path: Path, **filters: Any) -> int:
         if filters.get("month") is None and (filters.get("start") is None or filters.get("end") is None):
             raise AppError("내보내기 조건이 필요합니다. --month 또는 --from과 --to를 함께 지정하세요.")
@@ -188,7 +211,9 @@ class BudgetService:
             writer.writeheader()
             for t in self.newest(**filters):
                 row = t.record()
+                # 교환용 CSV에는 id를 넣지 않습니다. 다시 가져올 때 새 id로 등록합니다.
                 del row["id"]
+                # 태그 묶음을 CSV 규격의 쉼표 구분 문자열로 바꿉니다.
                 row["tags"] = ",".join(t.tags)
                 writer.writerow(row)
                 count += 1
